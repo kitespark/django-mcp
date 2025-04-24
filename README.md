@@ -232,6 +232,18 @@ The command will start the inspector and output the URL (usually `http://127.0.0
 
 ---
 
+## Session Caching and Re-initialization
+
+MCP clients often assume persistent session state and do not resend initialization handshakes after disconnects. However, the upstream MCP SDK stores session state in RAM, which is lost on server restarts, redeployments, or when routing changes across load-balanced instances.
+
+To work around this, `django-mcp` caches the client's initialization (`initialize` and `notifications/initialized`) messages and replays them transparently when a client reconnects. This ensures server-side session objects are restored to an initialized state, preventing common errors like:
+
+```python
+RuntimeError: Received request before initialization was complete
+```
+
+This behavior is implemented in `django_mcp/mcp_sdk_session_replay.py` and ensures a smoother experience with clients that do not reinitialize automatically.
+
 ## Future roadmap
 
 * Streamable HTTP transport
