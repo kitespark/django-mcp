@@ -39,27 +39,29 @@ async def try_replay_session_initialize(sse: SseServerTransport, session_id: str
 
 
 class SseReadStreamProxy:
-    def __init__(self, wrapped, cache_slug: str, ttl_seconds: int = 3600):
+    def __init__(self, wrapped, cache_slug: str, enable_cache_persist_sessions: bool = True, ttl_seconds: int = None):
         self._wrapped = wrapped
         self._cache_slug = cache_slug
-        self._ttl_seconds = ttl_seconds
         self._initialized = False
+        self.enable_cache_persist_sessions = enable_cache_persist_sessions
+        self.ttl_seconds = ttl_seconds  # value of None means forever
 
     async def receive(self):
         msg = await self._wrapped.receive()
-        if hasattr(msg, "root"):
-            method = getattr(msg.root, "method", None)
-            if method in ("initialize", "notifications/initialized"):
-                try:
-                    data = msg.model_dump(mode="json", by_alias=True, exclude_none=True)
-                    if data.get("_synthetic", False):
-                        logger.debug(f"Skipping caching synthetic {method} message")
-                        return msg
-                    key = f"mcp:{method}:{self._cache_slug}"
-                    cache.set(key, json.dumps(data), timeout=self._ttl_seconds)
-                    logger.debug(f"Cached {method} request under key: {key}")
-                except Exception as e:
-                    logger.warning(f"Failed to cache {method} message: {e}")
+        if self.enable_cache_persist_sessions:  # workaround for client reconnects to re-init sessions
+            if hasattr(msg, "root"):
+                method = getattr(msg.root, "method", None)
+                if method in ("initialize", "notifications/initialized"):
+                    try:
+                        data = msg.model_dump(mode="json", by_alias=True, exclude_none=True)
+                        if data.get("_synthetic", False):
+                            logger.debug(f"Skipping caching synthetic {method} message")
+                            return msg
+                        key = f"mcp:{method}:{self._cache_slug}"
+                        cache.set(key, json.dumps(data), timeout=self.ttl_seconds)
+                        logger.debug(f"Cached {method} request under key: {key}")
+                    except Exception as e:
+                        logger.warning(f"Failed to cache {method} message: {e}")
         return msg
 
     def __aiter__(self):
