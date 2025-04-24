@@ -10,13 +10,17 @@ import json
 import logging
 from urllib.parse import urlparse, parse_qs
 
+from mcp.server.sse import SseServerTransport
+
+from .mcp_sdk_session_replay import try_replay_session_initialize
+
 logger = logging.getLogger(__name__)
 
 # Interceptor function to modify SSE 'endpoint' event messages
 # to interpolate the URL template with actual values correctly
 #   original: /mcp/{user_slug:uuid}/messages/?session_id=6d60664594bc48d4b0f7d4362f4d728d
 #   desired: /mcp/f9aac356-7d84-4c6f-9bfc-dd7bca4961d9/messages/?session_id=6d60664594bc48d4b0f7d4362f4d728d
-def make_intercept_sse_send(original_send, resolved_message_base_url: str):
+def make_intercept_sse_send(sse: SseServerTransport, original_send, resolved_base_url_from_params: str):
     async def intercept_sse_send(message):
         if message["type"] == "http.response.body":
             try:
@@ -33,10 +37,11 @@ def make_intercept_sse_send(original_send, resolved_message_base_url: str):
                         query = parse_qs(parsed.query)
                         session_id = query.get('session_id', [None])[0]
                         if session_id:
-                            new_url = f'{resolved_message_base_url}?session_id={session_id}'
+                            new_url = f'{resolved_base_url_from_params}/messages/?session_id={session_id}'
                             modified_body_str = f"event: endpoint\ndata: {new_url}\n\n"
                             message["body"] = modified_body_str.encode('utf-8')
                             logger.debug(f"Modified SSE endpoint event url to: {new_url}")
+                            await try_replay_session_initialize(sse, session_id=session_id, cache_slug=resolved_base_url_from_params)
                         else:
                             logger.warning("Could not find session_id in original endpoint event data.")
                     else:

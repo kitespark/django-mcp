@@ -4,10 +4,14 @@ django_mcp/asgi_patch_fastmcp.py
 Patches FastMCP.sse_app to handle dynamic paths and ASGI connection details
 """
 
+import asyncio
+import collections
 import contextvars
+import json
 import typing
 
 from django.conf import settings
+from django.core.cache import cache
 from mcp.server.fastmcp import FastMCP
 from mcp.server.sse import SseServerTransport
 from starlette.applications import Starlette
@@ -16,7 +20,7 @@ from starlette.requests import Request
 from .log import logger
 from .interop_django_fastapi import _interpolate_starlette_path_with_url_params
 from .asgi_interceptors import make_intercept_sse_send
-
+from .mcp_sdk_session_replay import SseReadStreamProxy
 
 # Context variable to store MCP path parameters captured during the ASGI SSE connection
 mcp_connection_path_params: contextvars.ContextVar[dict[str, typing.Any] | None] = contextvars.ContextVar(
@@ -44,18 +48,18 @@ def FastMCP_sse_app_patch(_self: FastMCP, starlette_base_path: str):
 
     async def handle_sse(request: Request) -> None:
         token = None  # Initialize token for context variable reset
-        resolved_message_base_url = "" # Initialize to avoid potential UnboundLocalError in error logs
+        resolved_base_url_from_params = "" # Initialize to avoid potential UnboundLocalError in error logs
 
         # Step 1) Capture path parameters from the request and store them in Context
         try:
             # Extract path parameters from the request
             path_params = request.path_params
 
-            # Calculate the actual message base URL using the captured parameters
-            resolved_message_base_url = _interpolate_starlette_path_with_url_params(
+            # Calculate the actual base URL using the captured parameters
+            resolved_base_url_from_params = _interpolate_starlette_path_with_url_params(
                 starlette_base_path, path_params
-            ) + "/messages/"
-            logger.debug(f"Resolved message base URL for SSE: {resolved_message_base_url}")
+            )
+            logger.debug(f"Resolved base URL for SSE: {resolved_base_url_from_params}")
 
             # Set the context variable for the duration of this connection
             # so that URL params can be accessed by mcp.tool-decorated functions
@@ -69,7 +73,7 @@ def FastMCP_sse_app_patch(_self: FastMCP, starlette_base_path: str):
             raise # Re-raise the exception
 
         # Step 2) Intercept the original ASGI send callable to be able to rewrite SSE payloads
-        intercepted_send = make_intercept_sse_send(request._send, resolved_message_base_url)
+        intercepted_send = make_intercept_sse_send(sse, request._send, resolved_base_url_from_params)
         try:
             # Use the intercepted send when connecting
             async with sse.connect_sse(
@@ -77,9 +81,11 @@ def FastMCP_sse_app_patch(_self: FastMCP, starlette_base_path: str):
                 request.receive,
                 intercepted_send,
             ) as (read_stream, write_stream):
-                # Run the MCP server loop
+                # Wrap read_stream in proxy to intercept messages
+                read_stream_proxied = SseReadStreamProxy(read_stream, resolved_base_url_from_params)
+            # Run the MCP server loop
                 await _self._mcp_server.run(
-                    read_stream,
+                    read_stream_proxied,
                     write_stream,
                     _self._mcp_server.create_initialization_options(),
                 )
