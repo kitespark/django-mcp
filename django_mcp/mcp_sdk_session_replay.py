@@ -35,7 +35,7 @@ async def try_replay_session_initialize(sse: SseServerTransport, session_id: str
                 await writer.send(replay_msg)
                 logger.debug(f"Replayed cached '{method}' for: {cache_slug}\n\t{payload}")
         except Exception as e:
-            logger.warning(f"Failed to replay '{method}' for {cache_slug}: {e}")
+            logger.error(f"Unexpected error getting cache key '{cache_key}' for MCP session replay: {e}")
 
 
 class SseReadStreamProxy:
@@ -61,7 +61,7 @@ class SseReadStreamProxy:
                         cache.set(key, json.dumps(data), timeout=self.ttl_seconds)
                         logger.debug(f"Cached {method} request under key: {key}")
                     except Exception as e:
-                        logger.warning(f"Failed to cache {method} message: {e}")
+                        logger.error(f"Unexpected error setting cache key '{cache_key}' for MCP session replay: {e}")
         return msg
 
     def __aiter__(self):
