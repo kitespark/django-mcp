@@ -28,7 +28,7 @@ def apply_django_settings(fastmcp_obj: FastMCP):
     fastmcp_obj._mcp_server.instructions = settings.MCP_SERVER_INSTRUCTIONS
     fastmcp_obj._mcp_server.version = settings.MCP_SERVER_VERSION
 
-def mount_mcp_server(django_http_app: ASGIApp, mcp_base_path: str = '/mcp') -> ASGIApp:
+def mount_mcp_server(django_http_app: ASGIApp, mcp_base_path: str = '/mcp', *, enable_cache_persist_sessions: bool = True) -> ASGIApp:
     """
     Mounts the MCP server alongside a Django ASGI application.
 
@@ -37,6 +37,7 @@ def mount_mcp_server(django_http_app: ASGIApp, mcp_base_path: str = '/mcp') -> A
         mcp_base_path: The base path for MCP endpoints. Can contain
                        Django-style path parameters (e.g., '/mcp/<uuid:session_id>')
                        which will be converted to Starlette format for routing.
+        enable_cache_persist_sessions: If True, enables caching of MCP initialization messages for client reconnects.
 
     Returns:
         A combined Starlette ASGI application.
@@ -48,10 +49,12 @@ def mount_mcp_server(django_http_app: ASGIApp, mcp_base_path: str = '/mcp') -> A
     starlette_base_path = _convert_django_path_to_starlette(mcp_base_path)
     logger.debug(f"Converted Django-style base path for Starlette: {starlette_base_path}")
 
-    # Call the patched FastMCP.sse_app() method, passing the Starlette path.
-    # This patch contains the logic to handle SSE connections and modify the endpoint URL.
-    # The patch function now resides in asgi_interceptors.py
-    (handle_sse, sse) = FastMCP_sse_app_patch(mcp_app, starlette_base_path=starlette_base_path)
+    # Call the patched FastMCP.sse_app() method, passing the Starlette path and caching flag.
+    (handle_sse, sse) = FastMCP_sse_app_patch(
+        mcp_app,
+        starlette_base_path=starlette_base_path,
+        enable_cache_persist_sessions=enable_cache_persist_sessions
+    )
 
     # Register the patched SSE handler and mount the messages endpoint
     # using the Starlette-compatible path.

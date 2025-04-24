@@ -20,7 +20,19 @@ logger = logging.getLogger(__name__)
 # to interpolate the URL template with actual values correctly
 #   original: /mcp/{user_slug:uuid}/messages/?session_id=6d60664594bc48d4b0f7d4362f4d728d
 #   desired: /mcp/f9aac356-7d84-4c6f-9bfc-dd7bca4961d9/messages/?session_id=6d60664594bc48d4b0f7d4362f4d728d
-def make_intercept_sse_send(sse: SseServerTransport, original_send, resolved_base_url_from_params: str):
+def make_intercept_sse_send(
+    sse: SseServerTransport,
+    original_send,
+    resolved_base_url_from_params: str,
+):
+    """
+    Creates an ASGI send interceptor to modify SSE endpoint URLs and replay session init messages on client reconnect.
+
+    Args:
+        sse: The SseServerTransport instance.
+        original_send: The original ASGI send callable.
+        resolved_base_url_from_params: The base URL with path parameters resolved.
+    """
     async def intercept_sse_send(message):
         if message["type"] == "http.response.body":
             try:
@@ -40,7 +52,7 @@ def make_intercept_sse_send(sse: SseServerTransport, original_send, resolved_bas
                             new_url = f'{resolved_base_url_from_params}/messages/?session_id={session_id}'
                             modified_body_str = f"event: endpoint\ndata: {new_url}\n\n"
                             message["body"] = modified_body_str.encode('utf-8')
-                            logger.debug(f"Modified SSE endpoint event url to: {new_url}")
+                            logger.info(f"New MCP connection. endpoint: {new_url}")
                             await try_replay_session_initialize(sse, session_id=session_id, cache_slug=resolved_base_url_from_params)
                         else:
                             logger.warning("Could not find session_id in original endpoint event data.")
