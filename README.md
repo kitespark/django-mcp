@@ -244,6 +244,19 @@ RuntimeError: Received request before initialization was complete
 
 This behavior is implemented in `django_mcp/mcp_sdk_session_replay.py` and ensures a smoother experience with clients that do not reinitialize automatically.
 
+In production, you may need to ensure that clients connect to the same MCP server instance since session state is not shared across load-balanced instances. In terraform your application load balancer config may include a block like this:
+
+```hcl
+resource "aws_lb_target_group" "app" {
+  # ...
+  stickiness {
+    enabled = true
+    type    = "lb_cookie"
+    cookie_duration = 86400  # optional, default is 1 day
+  }
+}
+```
+
 ## Future roadmap
 
 * Streamable HTTP transport
