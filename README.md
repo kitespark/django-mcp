@@ -232,6 +232,51 @@ The command will start the inspector and output the URL (usually `http://127.0.0
 
 ---
 
+## Session Caching and Re-initialization
+
+MCP clients often assume persistent session state and do not resend initialization handshakes after disconnects. However, the upstream MCP SDK stores session state in RAM, which is lost on server restarts, redeployments, or when routing changes across load-balanced instances.
+
+To work around this, `django-mcp` caches the client's initialization (`initialize` and `notifications/initialized`) messages and replays them transparently when a client reconnects. This ensures server-side session objects are restored to an initialized state, preventing common errors like:
+
+```python
+RuntimeError: Received request before initialization was complete
+```
+
+This behavior is implemented in `django_mcp/mcp_sdk_session_replay.py` and ensures a smoother experience with clients that do not reinitialize automatically.
+
+## Server Affinity in Production Deployments
+
+For the same foregoing reason that MCP sessions are persisted in RAM, you must implement *server affinity* in any load-balanced environment so that clients always connect to the same Django node. This ensures that any client with an MCP `session_id` sends successive requests to the same Django node with its session state in RAM. A common pattern is to inspect the `X-Forwarded-For` header in your load balancer to retrieve the client's WAN IP and route to specific load-balanced nodes based on this.
+
+```
+# haproxy.cfg
+
+frontend http_in
+    # ...
+
+    # extract the client WAN ip
+    # use `X-Forwarded-For` or `src` if not behind another load balancer
+    http-request set-var(req.client_wan_ip) hdr_ip(X-Forwarded-For)
+    http-request set-header X-Sticky-Identifier %[var(req.client_wan_ip)]
+
+    use_backend django_cluster
+
+backend django_cluster
+    # choose a backend node based on hash of client WAN ip
+    balance hdr(X-Sticky-Identifier)
+    hash-type consistent
+
+    # persist backend node stickiness for 60 minutes
+    stick-table type string size 1m expire 60m
+    stick on req.fhdr(X-Sticky-Identifier)
+
+    # ...
+```
+
+In this example, the haproxy `stick-table` entry should assure successive requests are sent to the same Django node when scaling up or scaling down.
+
+Clients already connected to a Django container that is being terminated may have a period of time when connections are draining where the MCP client remains connected to `/mcp/sse` but new messages posted to `/mcp/messages/` are routed to a different load-balanced Django container. This can be mitigated by passing `--timeout-graceful-shutdown 0` to `uvicorn`.
+
 ## Future roadmap
 
 * Streamable HTTP transport

@@ -57,6 +57,11 @@ def FastMCP_sse_app_patch(_self: FastMCP, starlette_base_path: str, *, enable_ca
         token = None  # Initialize token for context variable reset
         resolved_base_url_from_params = "" # Initialize to avoid potential UnboundLocalError in error logs
 
+        if settings.MCP_LOG_HTTP_HEADERS_ON_SSE_CONNECT:
+            logger.info(f'SSE connection headers:')
+            for header, value in request.headers.items():
+                logger.info(f'\t{header}: {value}')
+
         # Step 1) Capture path parameters from the request and store them in Context
         try:
             # Extract path parameters from the request

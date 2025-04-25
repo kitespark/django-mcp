@@ -23,7 +23,7 @@ async def try_replay_session_initialize(sse: SseServerTransport, session_id: str
         return
 
     for method in ('initialize', 'notifications/initialized'):
-        cache_key = f'mcp:{method}:{cache_slug}'
+        cache_key = f'mcp:{cache_slug}:{method}'
         try:
             cached_json = cache.get(cache_key)
             if cached_json:
@@ -34,8 +34,10 @@ async def try_replay_session_initialize(sse: SseServerTransport, session_id: str
                 replay_msg = JSONRPCMessage.model_validate_json(json.dumps(payload))
                 await writer.send(replay_msg)
                 logger.debug(f"Replayed cached '{method}' for: {cache_slug}\n\t{payload}")
+            else:
+                logger.debug(f"No cached '{method}' from previous session found for: {cache_slug}")
         except Exception as e:
-            logger.warning(f"Failed to replay '{method}' for {cache_slug}: {e}")
+            logger.error(f"Unexpected error getting cache key '{cache_key}' for MCP session replay: {e}")
 
 
 class SseReadStreamProxy:
@@ -57,11 +59,11 @@ class SseReadStreamProxy:
                         if data.get("_synthetic", False):
                             logger.debug(f"Skipping caching synthetic {method} message")
                             return msg
-                        key = f"mcp:{method}:{self._cache_slug}"
+                        key = f"mcp:{self._cache_slug}:{method}"
                         cache.set(key, json.dumps(data), timeout=self.ttl_seconds)
                         logger.debug(f"Cached {method} request under key: {key}")
                     except Exception as e:
-                        logger.warning(f"Failed to cache {method} message: {e}")
+                        logger.error(f"Unexpected error setting cache key '{cache_key}' for MCP session replay: {e}")
         return msg
 
     def __aiter__(self):
