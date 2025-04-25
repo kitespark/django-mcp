@@ -266,12 +266,16 @@ backend django_cluster
     balance hdr(X-Sticky-Identifier)
     hash-type consistent
 
-    # persist backend node stickiness for 10 minutes
-    stick-table type string size 1m expire 10m
+    # persist backend node stickiness for 60 minutes
+    stick-table type string size 1m expire 60m
     stick on req.fhdr(X-Sticky-Identifier)
 
     # ...
 ```
+
+In this example, the haproxy `stick-table` entry should assure successive requests are sent to the same Django node when scaling up or scaling down.
+
+Clients already connected to a Django container that is being terminated may have a period of time when connections are draining where the MCP client remains connected to `/mcp/sse` but new messages posted to `/mcp/messages/` are routed to a different load-balanced Django container. This can be mitigated by passing `--timeout-graceful-shutdown 0` to `uvicorn`.
 
 ## Future roadmap
 
