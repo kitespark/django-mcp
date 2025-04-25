@@ -244,17 +244,33 @@ RuntimeError: Received request before initialization was complete
 
 This behavior is implemented in `django_mcp/mcp_sdk_session_replay.py` and ensures a smoother experience with clients that do not reinitialize automatically.
 
-In production, you may need to ensure that clients connect to the same MCP server instance since session state is not shared across load-balanced instances. In terraform your application load balancer config may include a block like this:
+## Server Affinity in Production Deployments
 
-```hcl
-resource "aws_lb_target_group" "app" {
-  # ...
-  stickiness {
-    enabled = true
-    type    = "lb_cookie"
-    cookie_duration = 86400  # optional, default is 1 day
-  }
-}
+For the same foregoing reason that MCP sessions are persisted in RAM, you must implement *server affinity* in any load-balanced environment so that clients always connect to the same Django node. This ensures that any client with an MCP `session_id` sends successive requests to the same Django node with its session state in RAM. A common pattern is to inspect the `X-Forwarded-For` header in your load balancer to retrieve the client's WAN IP and route to specific load-balanced nodes based on this.
+
+```
+# haproxy.cfg
+
+frontend http_in
+    # ...
+
+    # extract the client WAN ip
+    # use `X-Forwarded-For` or `src` if not behind another load balancer
+    http-request set-var(req.client_wan_ip) hdr_ip(X-Forwarded-For)
+    http-request set-header X-Sticky-Identifier %[var(req.client_wan_ip)]
+
+    use_backend django_cluster
+
+backend django_cluster
+    # choose a backend node based on hash of client WAN ip
+    balance hdr(X-Sticky-Identifier)
+    hash-type consistent
+
+    # persist backend node stickiness for 10 minutes
+    stick-table type string size 1m expire 10m
+    stick on req.fhdr(X-Sticky-Identifier)
+
+    # ...
 ```
 
 ## Future roadmap
