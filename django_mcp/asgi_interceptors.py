@@ -52,7 +52,7 @@ def make_intercept_sse_send(
                             new_url = f'{resolved_base_url_from_params}/messages/?session_id={session_id}'
                             modified_body_str = f"event: endpoint\ndata: {new_url}\n\n"
                             message["body"] = modified_body_str.encode('utf-8')
-                            logger.info(f"New MCP connection. endpoint: {new_url}")
+                            logger.info(f"New MCP connection. session_id={session_id} endpoint={new_url}")
                             await try_replay_session_initialize(sse, session_id=session_id, cache_slug=resolved_base_url_from_params)
                         else:
                             logger.warning("Could not find session_id in original endpoint event data.")

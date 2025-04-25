@@ -20,6 +20,7 @@ class MCPConfig(AppConfig):
         "MCP_LOG_LEVEL": "INFO",
         'MCP_LOG_TOOL_REGISTRATION': True,
         'MCP_LOG_TOOL_DESCRIPTIONS': False,
+        'MCP_LOG_HTTP_HEADERS_ON_SSE_CONNECT': True,
         'MCP_SERVER_INSTRUCTIONS': 'Provides MCP tools',
         "MCP_SERVER_TITLE": "Django MCP Server",
         'MCP_SERVER_VERSION': '0.1.0',
