@@ -3,6 +3,7 @@ import collections
 import json
 import logging
 from uuid import UUID
+import anyio
 
 from django.core.cache import cache
 from mcp.server.sse import SseServerTransport
@@ -72,6 +73,11 @@ class SseReadStreamProxy:
     async def __anext__(self):
         try:
             message = await self.receive()
+        except anyio.EndOfStream:
+            # The underlying anyio stream (self._wrapped) has ended.
+            # Convert this to StopAsyncIteration to conform to the
+            # Python asynchronous iterator protocol.
+            raise StopAsyncIteration
         except (StopAsyncIteration, GeneratorExit):
             raise StopAsyncIteration
         return message
