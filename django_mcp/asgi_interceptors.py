@@ -10,6 +10,7 @@ import json
 import logging
 from urllib.parse import urlparse, parse_qs
 
+from django.conf import settings
 from mcp.server.sse import SseServerTransport
 
 from .mcp_sdk_session_replay import try_replay_session_initialize
