@@ -37,7 +37,8 @@ async def try_replay_session_initialize(sse: SseServerTransport, session_id: str
             else:
                 logger.debug(f"No cached '{method}' from previous session found for: {cache_slug}")
         except Exception as e:
-            logger.error(f"Unexpected error getting cache key '{cache_key}' for MCP session replay: {e}")
+            logger.error(f"Unexpected error getting or validating JSON for cache key '{cache_key}' for MCP session replay, deleting cache key: {e}")
+            cache.delete(cache_key)
 
 
 class SseReadStreamProxy:
