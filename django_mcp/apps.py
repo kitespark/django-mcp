@@ -17,6 +17,7 @@ class MCPConfig(AppConfig):
     verbose_name = 'Django MCP'
 
     defaults = {
+        "MCP_BASE_URL": "",
         "MCP_LOG_LEVEL": "INFO",
         'MCP_LOG_TOOL_REGISTRATION': True,
         'MCP_LOG_TOOL_DESCRIPTIONS': False,
