@@ -28,6 +28,23 @@ class MCPConfig(AppConfig):
         'MCP_DIRS': [],
         "MCP_PATCH_SDK_TOOL_LOGGING": True,
         "MCP_PATCH_SDK_GET_CONTEXT": True,
+        
+        # HTTP Stateless Transport Settings
+        'MCP_HTTP_TRANSPORT_ENABLED': False,
+        'MCP_HTTP_REQUEST_TIMEOUT': 30.0,
+        'MCP_HTTP_MAX_REQUEST_SIZE': 10 * 1024 * 1024,  # 10MB
+        'MCP_HTTP_ENABLE_COMPRESSION': True,
+        'MCP_HTTP_CORS_ENABLED': False,
+        'MCP_HTTP_CORS_ORIGINS': [],
+        'MCP_HTTP_CORS_METHODS': ["GET", "POST", "OPTIONS"],
+        'MCP_HTTP_CORS_HEADERS': ["Content-Type", "Authorization"],
+        'MCP_HTTP_JSON_RESPONSE': False,
+        'MCP_HTTP_HEALTH_CHECK_ENABLED': True,
+        'MCP_HTTP_HEALTH_CHECK_PATH': "/health",
+        'MCP_HTTP_ENABLE_METRICS': False,
+        'MCP_HTTP_METRICS_PATH': "/metrics",
+        'MCP_HTTP_SESSION_TTL': 3600,  # 1 hour
+        'MCP_HTTP_SESSION_CLEANUP_INTERVAL': 300,  # 5 minutes
     }
 
     def apply_default_settings(self):
