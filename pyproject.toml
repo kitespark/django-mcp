@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "django-mcp"
-version = "0.3.1"
+version = "0.3.2"
 description = "django-mcp adds MCP tool hosting to Django."
 authors = [
     {name = "Patrick Paul", email = "patrick@kitespark.com"},
@@ -18,7 +18,7 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-    "mcp[cli]~=1.9.2",
+    "mcp[cli]~=1.9.3",
 ]
 
 [project.urls]

@@ -28,7 +28,14 @@ def apply_django_settings(fastmcp_obj: FastMCP):
     fastmcp_obj._mcp_server.instructions = settings.MCP_SERVER_INSTRUCTIONS
     fastmcp_obj._mcp_server.version = settings.MCP_SERVER_VERSION
 
-def mount_mcp_server(django_http_app: ASGIApp, mcp_base_path: str = '/mcp', *, enable_cache_persist_sessions: bool = True) -> ASGIApp:
+def mount_mcp_server(
+    django_http_app: ASGIApp,
+    mcp_base_path: str = '/mcp',
+    *,
+    transport_type: str = 'http_stateless',
+    enable_cache_persist_sessions: bool = True,
+    json_response: bool = False
+) -> ASGIApp:
     """
     Mounts the MCP server alongside a Django ASGI application.
 
@@ -37,6 +44,40 @@ def mount_mcp_server(django_http_app: ASGIApp, mcp_base_path: str = '/mcp', *, e
         mcp_base_path: The base path for MCP endpoints. Can contain
                        Django-style path parameters (e.g., '/mcp/<uuid:session_id>')
                        which will be converted to Starlette format for routing.
+        transport_type: Transport type to use ('sse' or 'http_stateless'). Defaults to 'sse'.
+        enable_cache_persist_sessions: If True, enables caching of MCP initialization messages for client reconnects.
+                                     Only applies to SSE transport.
+        json_response: If True, uses JSON responses instead of SSE streams.
+                      Only applies to HTTP stateless transport.
+
+    Returns:
+        A combined Starlette ASGI application.
+    """
+    if transport_type == 'sse':
+        return _mount_sse_mcp_server(
+            django_http_app=django_http_app,
+            mcp_base_path=mcp_base_path,
+            enable_cache_persist_sessions=enable_cache_persist_sessions
+        )
+    elif transport_type == 'http_stateless':
+        # Import here to avoid circular imports
+        from .http_stateless_transport import mount_http_stateless_mcp_server
+        return mount_http_stateless_mcp_server(
+            django_http_app=django_http_app,
+            mcp_base_path=mcp_base_path,
+            json_response=json_response
+        )
+    else:
+        raise ValueError(f"Unknown transport type: {transport_type}. Must be 'sse' or 'http_stateless'.")
+
+
+def _mount_sse_mcp_server(django_http_app: ASGIApp, mcp_base_path: str = '/mcp', *, enable_cache_persist_sessions: bool = True) -> ASGIApp:
+    """
+    Internal function to mount the SSE MCP server (original implementation).
+    
+    Args:
+        django_http_app: The main Django ASGI application.
+        mcp_base_path: The base path for MCP endpoints.
         enable_cache_persist_sessions: If True, enables caching of MCP initialization messages for client reconnects.
 
     Returns:
