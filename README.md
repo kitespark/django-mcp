@@ -24,11 +24,18 @@ INSTALLED_APPS = [
 
 ## Usage
 
-To use this library, you need to mount the MCP ASGI application to a route in your existing Django ASGI application.
+To use this library, you need to mount the MCP ASGI application to a route in your existing Django ASGI application. `django-mcp` supports two transport protocols:
+
+1. **HTTP Stateless** - The default transport for request-response patterns (recommended)
+2. **SSE (Server-Sent Events)** - Alternative transport for real-time streaming
 
 ### ASGI setup
 
 First, configure your Django ASGI application entrypoint `asgi.py`. Use `mount_mcp_server` to mount the MCP server using Django-style URL path parameters. These URL path parameters will be available in the MCP [Context](https://github.com/modelcontextprotocol/python-sdk/blob/58b989c0a3516597576cd3025a45d194578135bd/README.md#context) object to any `@mcp.tool` decorated functions.
+
+#### HTTP Stateless Transport (Default)
+
+The HTTP stateless transport uses standard HTTP request-response patterns and is the recommended transport for most use cases. It provides better compatibility with load balancers, proxies, and standard HTTP tooling.
 
 ```python
 # asgi.py
@@ -48,13 +55,21 @@ django.setup()
 # get the django http application
 django_http_app = get_asgi_application()
 
-# Mount MCP server dynamically using a URL parameter (e.g., user_uuid)
-application = mount_mcp_server(django_http_app=django_http_app, mcp_base_path='/mcp/<slug:user_uuid>')
+# Mount MCP server with HTTP stateless transport (default)
+application = mount_mcp_server(
+    django_http_app=django_http_app,
+    mcp_base_path='/mcp/<slug:user_uuid>',
+    transport_type='http_stateless'  # This is the default
+)
 
 # for django-channels ASGI:
 # from channels.routing import ProtocolTypeRouter
 # application = ProtocolTypeRouter({
-#     "http": mount_mcp_server(django_http_app=django_http_app, mcp_base_path='/mcp/<slug:user_uuid>')
+#     "http": mount_mcp_server(
+#         django_http_app=django_http_app,
+#         mcp_base_path='/mcp/<slug:user_uuid>',
+#         transport_type='http_stateless'
+#     )
 # })
 ```
 
@@ -64,6 +79,23 @@ Alternatively, if you don't need dynamic mounting, you can provide a static path
 # Simpler setup with a static path
 application = mount_mcp_server(django_http_app=django_http_app, mcp_base_path='/mcp')
 ```
+
+The HTTP stateless transport serves MCP requests at `/mcp/http` and provides a health check endpoint at `/mcp/health`.
+
+#### SSE Transport (Alternative)
+
+For applications that need real-time streaming capabilities, you can use the SSE transport:
+
+```python
+# Use SSE transport instead
+application = mount_mcp_server(
+    django_http_app=django_http_app,
+    mcp_base_path='/mcp/<slug:user_uuid>',
+    transport_type='sse'
+)
+```
+
+The SSE transport serves MCP requests at `/mcp/sse`.
 
 To start your server:
 
@@ -128,19 +160,57 @@ async def get_user_info_from_path(ctx: Context) -> str:
 
 This library allows customization through Django settings. The following settings can be defined in your project's `settings.py`:
 
+### Core MCP Settings
+
 | key                          | description                                             | default                |
 |------------------------------|---------------------------------------------------------|------------------------|
 | `MCP_LOG_LEVEL`              | Controls the MCP logging level                          | `'INFO'`               |
 | `MCP_LOG_TOOL_REGISTRATION`  | Controls whether tool registration is logged at startup | `True`                 |
 | `MCP_LOG_TOOL_DESCRIPTIONS`  | Controls whether tool descriptions are also logged      | `False`                |
 | `MCP_SERVER_INSTRUCTIONS`    | Sets the instructions provided by the MCP server        | `'Provides MCP tools'` |
-| `MCP_SERVER_TITLE`           | Sets the title of the MCP server                        | `'MCP Server'`         |
+| `MCP_SERVER_TITLE`           | Sets the title of the MCP server                        | `'Django MCP Server'`  |
 | `MCP_SERVER_VERSION`         | Sets the version of the MCP server                      | `'0.1.0'`              |
 | `MCP_DIRS`                   | Additional search paths to load MCP modules             | `[]`                   |
 | `MCP_PATCH_SDK_TOOL_LOGGING` | Adds debug and exception logging to @tool decorator     | `True`                 |
 | `MCP_PATCH_SDK_GET_CONTEXT`  | Adds URL path parameters to @tool Context object        | `True`                 |
 
+### HTTP Stateless Transport Settings
+
+| key                                    | description                                        | default                        |
+|----------------------------------------|----------------------------------------------------|--------------------------------|
+| `MCP_HTTP_REQUEST_TIMEOUT`             | Request timeout in seconds                         | `30.0`                         |
+| `MCP_HTTP_MAX_REQUEST_SIZE`            | Maximum request size in bytes                      | `10485760` (10MB)              |
+| `MCP_HTTP_ENABLE_COMPRESSION`          | Enable response compression                        | `True`                         |
+| `MCP_HTTP_CORS_ENABLED`                | Enable CORS support                               | `False`                        |
+| `MCP_HTTP_CORS_ORIGINS`                | List of allowed CORS origins                      | `[]`                           |
+| `MCP_HTTP_CORS_METHODS`                | List of allowed CORS methods                      | `["GET", "POST", "OPTIONS"]`   |
+| `MCP_HTTP_CORS_HEADERS`                | List of allowed CORS headers                      | `["Content-Type", "Authorization"]` |
+| `MCP_HTTP_JSON_RESPONSE`               | Use JSON responses instead of SSE streams         | `False`                        |
+| `MCP_HTTP_HEALTH_CHECK_ENABLED`        | Enable health check endpoint                      | `True`                         |
+| `MCP_HTTP_HEALTH_CHECK_PATH`           | Health check endpoint path                        | `"/health"`                    |
+| `MCP_HTTP_ENABLE_METRICS`              | Enable metrics endpoint                           | `False`                        |
+| `MCP_HTTP_METRICS_PATH`                | Metrics endpoint path                             | `"/metrics"`                   |
+| `MCP_HTTP_SESSION_TTL`                 | Session time-to-live in seconds                   | `3600` (1 hour)                |
+| `MCP_HTTP_SESSION_CLEANUP_INTERVAL`    | Session cleanup interval in seconds               | `300` (5 minutes)              |
+
 If a setting is not found in your project's `settings.py`, the default value will be used.
+
+### Example Configuration
+
+```python
+# settings.py
+
+# Core MCP settings
+MCP_SERVER_TITLE = "My Django MCP Server"
+MCP_SERVER_INSTRUCTIONS = "Provides tools for my application"
+MCP_LOG_LEVEL = "DEBUG"
+
+# HTTP stateless transport settings
+MCP_HTTP_CORS_ENABLED = True
+MCP_HTTP_CORS_ORIGINS = ["http://localhost:3000", "https://myapp.com"]
+MCP_HTTP_JSON_RESPONSE = True
+MCP_HTTP_REQUEST_TIMEOUT = 60.0
+```
 
 ## Server-side Tool Logging
 
@@ -216,17 +286,45 @@ async def increment_counter_tool(counter_id: int) -> None:
 
 ---
 
-## MCP Inspector
+## Testing Your MCP Server
+
+### Using curl
+
+You can test your HTTP stateless MCP server using curl:
+
+```bash
+# Test the health check endpoint
+curl http://localhost:8000/mcp/health
+
+# Test the MCP tools list
+curl -X POST http://localhost:8000/mcp/http \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc": "2.0", "method": "tools/list", "id": 1}'
+
+# Test calling a specific tool
+curl -X POST http://localhost:8000/mcp/http \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc": "2.0", "method": "tools/call", "params": {"name": "your_tool_name", "arguments": {}}, "id": 2}'
+```
+
+### MCP Inspector
 
 This library includes a convenient management command to run the MCP Inspector tool against your Django application.
 
 Start the inspector by running the following command in your project's root directory (where `manage.py` is located):
 
 ```bash
-python manage.py mcp_inspector [url]
-```
+# For HTTP stateless transport (default)
+python manage.py mcp_inspector http://localhost:8000/mcp/http
 
-Replace `[url]` with the URL of your running MCP server, typically `http://localhost:8000/mcp/sse`. If you omit the URL, it defaults to `http://127.0.0.1:8000/mcp/sse`.
+# For SSE transport
+python manage.py mcp_inspector http://localhost:8000/mcp/sse
+
+# If you omit the URL, it defaults to the SSE transport
+python manage.py mcp_inspector
+```
 
 The command will start the inspector and output the URL (usually `http://127.0.0.1:6274`) where you can access it in your web browser.
 
@@ -277,10 +375,37 @@ In this example, the haproxy `stick-table` entry should assure successive reques
 
 Clients already connected to a Django container that is being terminated may have a period of time when connections are draining where the MCP client remains connected to `/mcp/sse` but new messages posted to `/mcp/messages/` are routed to a different load-balanced Django container. This can be mitigated by passing `--timeout-graceful-shutdown 0` to `uvicorn`.
 
+## Transport Comparison
+
+| Feature | HTTP Stateless | SSE |
+|---------|----------------|-----|
+| **Protocol** | Standard HTTP request-response | Server-Sent Events |
+| **Load Balancer Compatibility** | ✅ Excellent | ⚠️ Requires session affinity |
+| **Proxy Compatibility** | ✅ Excellent | ⚠️ May require special configuration |
+| **Caching** | ✅ Standard HTTP caching | ❌ Not applicable |
+| **Real-time Streaming** | ❌ Request-response only | ✅ Real-time events |
+| **Connection Persistence** | ❌ Stateless | ✅ Persistent connection |
+| **Debugging** | ✅ Standard HTTP tools | ⚠️ Requires SSE-aware tools |
+| **Production Deployment** | ✅ Simple | ⚠️ Requires session affinity |
+
+### When to Use Each Transport
+
+**Use HTTP Stateless (recommended) when:**
+- You need maximum compatibility with standard HTTP infrastructure
+- Your application is deployed behind load balancers or proxies
+- You prefer stateless, cacheable request-response patterns
+- You want easier debugging and monitoring
+
+**Use SSE when:**
+- You need real-time streaming capabilities
+- Your application requires persistent connections
+- You can implement proper session affinity in your deployment
+
 ## Future roadmap
 
-* Streamable HTTP transport
 * Authentication and authorization
+* WebSocket transport
+* Enhanced metrics and monitoring
 
 ---
 
@@ -289,7 +414,7 @@ Clients already connected to a Django container that is being terminated may hav
 ```bash
 # Set up virtualenv (replace path)
 export VIRTUAL_ENV=./.venv/django-mcp
-uv venv --python 3.8 --link-mode copy ${VIRTUAL_ENV}
+uv venv --python 3.12 --link-mode copy ${VIRTUAL_ENV}
 uv sync
 ```
 
